@@ -68,8 +68,16 @@ def get_current_agent(session_id):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('idocgen_sessions')
     try:
-        response = table.get_item(Key={'session_id': session_id})
-        return response['Item']['current_agent']
+        response = table.query(
+            KeyConditionExpression=Key('session_id').eq(session_id)
+        )
+        items = response.get('Items', [])
+        if not items:
+            print(f"No session found for session_id: {session_id}")
+            return 'triage'
+        latest_item = max(items, key=lambda x: x['time_stamp'])
+        return latest_item['current_agent']
+    
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
             print(f"No session found for session_id: {session_id}")
@@ -108,9 +116,9 @@ def save_messages_to_dynamodb(session_id, messages):
             response = table.put_item(
                 Item={
                     'session_id': session_id,
-                    'message': message['content'] , 
+                    'content': message['content'] , 
                     'time_stamp' :str(time.time()) ,
-                    'agent':message['role'] 
+                    'role':message['role'] 
                 }   
             )
             print("Messages saved to DynamoDB" , response)
@@ -118,7 +126,7 @@ def save_messages_to_dynamodb(session_id, messages):
             print(f"Failed to save messages: {e.response['Error']['Message']}")
 
 def run_demo_loop(
-    starting_agent, context_variables=None, stream=False, debug=False
+    session_id, context_variables=None, stream=False, debug=False
 ) -> None:
     client = Swarm()
     print("Starting Swarm CLI 🐝")
@@ -130,17 +138,9 @@ def run_demo_loop(
     messages = get_messages(session_id)
     '''
 
+    messages = get_messages(session_id)
+    agent = agents[get_current_agent(session_id)]
 
-
-    messages = [] # get by session_id 
-    agent = starting_agent # get by session_id ( but it will be a string value ) 
-    current_agent = ''
-
-
-
-    
-    user_input = input("\033[90mUser\033[0m: ")
-    messages.append({"role": "user", "content": user_input})
 
     print("MESSAGES ARE : ")
     print(messages)
@@ -152,10 +152,11 @@ def run_demo_loop(
         stream=stream,
         debug=debug,
     )
+
     messages.extend(response.messages)
     # Initialize a session using Amazon DynamoDB
    
-    save_messages_to_dynamodb(session_id='example_session_id', messages=response.messages)
+    save_messages_to_dynamodb(session_id=session_id, messages=response.messages)
 
     agent = response.agent
 
@@ -180,8 +181,12 @@ def handler(event, context):
     messages = get_messages(session_id)
     messages.append({"role": "user", "content": message})
 
+    print("MESSAGES ARE : ")
+    print(messages)
+
     save_messages_to_dynamodb(session_id=session_id, messages=[message])
-    run_demo_loop(triage_agent, debug=False)
+    
+    run_demo_loop(session_id=session_id, debug=False)
 
 
 session_id = input("Enter session id : ")
