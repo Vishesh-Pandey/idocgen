@@ -1,17 +1,23 @@
-import random
-from boto3.dynamodb.conditions import Key
-import time
-import datetime
-from swarm import Agent
+from typing import List , Dict , Any , TypedDict , Optional
+
 from swarm.repl import run_demo_loop
-import json
+from swarm import Agent
 from swarm import Swarm
+
+import boto3
+from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+
+import time
+import random
 import dotenv
 dotenv.load_dotenv()
-import boto3
-from botocore.exceptions import ClientError
-from swarm import Agent
 
+
+class Message(TypedDict):
+    role: str
+    content: str
+    name : Optional[str]
 
 
 def generate_ppt(ppt_content):
@@ -64,28 +70,12 @@ triage_agent.functions = [transfer_to_ppt_maker, transfer_to_csv_maker]
 ppt_maker_agent.functions.append(transfer_back_to_triage)
 csv_maker_agent.functions.append(transfer_back_to_triage)
 
-def get_current_agent(session_id):
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('idocgen_sessions')
-    try:
-        response = table.query(
-            KeyConditionExpression=Key('session_id').eq(session_id)
-        )
-        items = response.get('Items', [])
-        if not items:
-            print(f"No session found for session_id: {session_id}")
-            return 'triage'
-        latest_item = max(items, key=lambda x: x['time_stamp'])
-        return latest_item['current_agent']
-    
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            print(f"No session found for session_id: {session_id}")
-            return 'triage'
-        else:
-            raise
+def get_agent_from_messages(messages:List[Message]):
+    if len(messages) < 2:
+        return 'Triage Agent'
+    return messages[-2]['agent']
 
-def get_messages(session_id):
+def get_messages(session_id:str):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table('idocgen_messages')
     response = table.query(
@@ -95,38 +85,42 @@ def get_messages(session_id):
     if not messages:
         print(f"No messages found for session_id: {session_id}")
         messages = []
-    return messages
+    return messages 
 
-def save_messages_to_dynamodb(session_id, messages):
+def save_messages_to_dynamodb(session_id:str, messages:List[Message] , agent:str):
     """Save messages to DynamoDB table."""
 
     dynamodb = boto3.resource('dynamodb' , region_name='ap-south-1')
-    # Replace 'MessagesTable' with your DynamoDB table name
     table = dynamodb.Table('idocgen_messages')
-    # Save messages to DynamoDB
-
-    print("THE TABLE OBJECT IS : " , table)
-    print("THE TABLE NAME IS : " , table.table_name)
-
-    current_agent = get_current_agent(session_id)
-    agent = agents[current_agent]
-
+ 
     for message in messages:
         try:
+            if not message : continue 
             response = table.put_item(
                 Item={
                     'session_id': session_id,
-                    'content': message['content'] , 
+                    'content': message['content'] if message['content'] else '' , 
                     'time_stamp' :str(time.time()) ,
-                    'role':message['role'] 
+                    'role':message['role'] ,
+                    'agent': agent
                 }   
             )
             print("Messages saved to DynamoDB" , response)
         except ClientError as e:
             print(f"Failed to save messages: {e.response['Error']['Message']}")
 
+
+agents = {
+    "Triage Agent": triage_agent,
+    "PPT Maker Agent": ppt_maker_agent,
+    "CSV Maker Agent": csv_maker_agent,
+    "transfer_back_to_triage": transfer_back_to_triage,
+    "transfer_to_ppt_maker": transfer_to_ppt_maker,
+    "transfer_to_csv_maker": transfer_to_csv_maker,
+}
+
 def run_demo_loop(
-    session_id, context_variables=None, stream=False, debug=False
+    session_id:str, context_variables=None, stream=False, debug=False
 ) -> None:
     client = Swarm()
     print("Starting Swarm CLI 🐝")
@@ -139,37 +133,34 @@ def run_demo_loop(
     '''
 
     messages = get_messages(session_id)
-    agent = agents[get_current_agent(session_id)]
+    last_agent = get_agent_from_messages(messages)
+    agent = agents.get(last_agent , triage_agent)
 
+    print("THE TYPE OF AGENT IS : " , type(agent))
 
-    print("MESSAGES ARE : ")
-    print(messages)
+    print("Agent Name is : " , agent.name)
+
+    print("==================================")
+    display_messages(messages)
+    print("==================================")
 
     response = client.run(
-        agent=agent,
+        agent=triage_agent,
         messages=messages,
         context_variables=context_variables or {},
         stream=stream,
         debug=debug,
     )
 
-    messages.extend(response.messages)
-    # Initialize a session using Amazon DynamoDB
-   
-    save_messages_to_dynamodb(session_id=session_id, messages=response.messages)
-
-    agent = response.agent
+    save_messages_to_dynamodb(session_id=session_id, messages=response.messages , agent=response.agent.name)
 
 
-
-agents = {
-    "triage": triage_agent,
-    "ppt_maker": ppt_maker_agent,
-    "csv_maker": csv_maker_agent,
-    "transfer_back_to_triage": transfer_back_to_triage,
-    "transfer_to_ppt_maker": transfer_to_ppt_maker,
-    "transfer_to_csv_maker": transfer_to_csv_maker,
-}
+def display_messages(messages):
+    for message in messages:
+        for key, value in message.items():
+            print(f"{key.capitalize()}: {value}")
+        print('=-=-=-' * 20)
+    print()
 
 def handler(event, context):
     data = event
@@ -181,15 +172,21 @@ def handler(event, context):
     messages = get_messages(session_id)
     messages.append({"role": "user", "content": message})
 
-    print("MESSAGES ARE : ")
-    print(messages)
+    display_messages(messages)
 
-    save_messages_to_dynamodb(session_id=session_id, messages=[message])
+
+
+    save_messages_to_dynamodb(session_id=session_id, messages=[message], agent='Triage Agent')
     
     run_demo_loop(session_id=session_id, debug=False)
 
 
 session_id = input("Enter session id : ")
+
+messages = get_messages(session_id)
+display_messages(messages)
+
+
 message = input("Enter your message : ")
 
 event = {
