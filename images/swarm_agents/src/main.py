@@ -1,5 +1,5 @@
 from typing import List , Dict , Any , TypedDict , Optional
-
+import json
 from swarm.repl import run_demo_loop
 from swarm import Agent
 from swarm import Swarm
@@ -76,7 +76,7 @@ def get_agent_from_messages(messages:List[Message]):
     return messages[-2]['agent']
 
 def get_messages(session_id:str):
-    dynamodb = boto3.resource('dynamodb')
+    dynamodb = boto3.resource('dynamodb', region_name='ap-south-1')
     table = dynamodb.Table('idocgen_messages')
     response = table.query(
         KeyConditionExpression=Key('session_id').eq(session_id)
@@ -93,14 +93,15 @@ def save_messages_to_dynamodb(session_id:str, messages:List[Message] , agent:str
     dynamodb = boto3.resource('dynamodb' , region_name='ap-south-1')
     table = dynamodb.Table('idocgen_messages')
  
-    for message in messages:
+    for index , message in enumerate(messages):
         try:
             if not message : continue 
             response = table.put_item(
                 Item={
+                    **message,
                     'session_id': session_id,
                     'content': message['content'] if message['content'] else '' , 
-                    'time_stamp' :str(time.time()) ,
+                    'time_stamp' :str(time.time()+index) ,
                     'role':message['role'] ,
                     'agent': agent
                 }   
@@ -154,6 +155,8 @@ def run_demo_loop(
 
     save_messages_to_dynamodb(session_id=session_id, messages=response.messages , agent=response.agent.name)
 
+    return response
+
 
 def display_messages(messages):
     for message in messages:
@@ -171,27 +174,23 @@ def handler(event, context):
     }
     messages = get_messages(session_id)
     messages.append({"role": "user", "content": message})
-
     display_messages(messages)
+    save_messages_to_dynamodb(session_id=session_id, messages=[message], agent='Triage Agent') 
+    response = run_demo_loop(session_id=session_id, debug=False)
 
+    return {
+        "statusCode": 200,
+        "body": {"messages": response.messages , "agent": response.agent.name}}
 
-
-    save_messages_to_dynamodb(session_id=session_id, messages=[message], agent='Triage Agent')
-    
-    run_demo_loop(session_id=session_id, debug=False)
-
-
+'''
+# Test
 session_id = input("Enter session id : ")
-
 messages = get_messages(session_id)
 display_messages(messages)
-
-
 message = input("Enter your message : ")
-
 event = {
     'session_id': session_id,
     'message': message
 }
-
 handler(event , '')
+'''

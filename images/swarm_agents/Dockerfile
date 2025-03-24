@@ -1,12 +1,17 @@
-FROM public.ecr.aws/lambda/python:3.8
+FROM public.ecr.aws/lambda/python:3.12.2025.03.21.14
 
-# Copy your application code into the container
-COPY app.py ${LAMBDA_TASK_ROOT}
+# Install Git using dnf (Amazon Linux 2023 uses dnf instead of yum)
+RUN dnf install -y git
 
-# Install any dependencies required by your application
+# Copy and install dependencies
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Set the CMD to your handler (could be app.handler if your handler function is named "handler" in "app.py")
-CMD ["app.handler"]
+# Install swarm separately from GitHub
+RUN pip install --no-cache-dir git+https://github.com/openai/swarm.git
 
+# Copy application code into the container
+COPY src/* ${LAMBDA_TASK_ROOT}
+
+# Set the CMD to your Lambda function handler
+CMD ["main.handler"]
