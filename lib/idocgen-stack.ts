@@ -20,6 +20,7 @@ export class IdocgenStack extends cdk.Stack {
       {
         code: lambda.DockerImageCode.fromImageAsset("./images/swarm_agents"),
         memorySize: 1024,
+        timeout: cdk.Duration.seconds(15),
       }
     );
 

@@ -7,6 +7,7 @@ from swarm import Swarm
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+import requests
 
 import time
 import random
@@ -19,11 +20,41 @@ class Message(TypedDict):
     content: str
     name : Optional[str]
 
+def convert_to_dict(input_string):
+    sections = input_string.split("<CONTENT>")
+    titles = sections[0].replace("<TITLES>", "").strip()
+    descriptions = sections[1].strip()
+    
+    titles = titles.replace("<SEP>", "^")
+    descriptions = descriptions.replace("<SEP>", "^")
+    
+    return {
+        "title": titles,
+        "description": descriptions
+    }
+
+def send_api_request(data):
+    url = "https://wwckrerv6vv3slv7t5dg54lqum0curtc.lambda-url.ap-south-1.on.aws/"
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, json=data, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return {"error": "Failed to get a valid response", "status_code": response.status_code}
+
 
 def generate_ppt(ppt_content):
     """Generate PowerPoint content based on a single formatted string."""
     print(f"[mock] Generating PPT with content: {ppt_content}")
-    return ppt_content
+
+    data = convert_to_dict(ppt_content)
+    result = send_api_request(data)
+    print(result)
+
+
+
+    return result
 
 def generate_csv(data_topic, num_rows):
     """Generate CSV content based on user input."""
