@@ -21,6 +21,7 @@ export class IdocgenStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromImageAsset("./images/swarm_agents"),
         memorySize: 1024,
         timeout: cdk.Duration.seconds(15),
+        description: "idocgen:swarm_agents",
       }
     );
 
@@ -35,6 +36,30 @@ export class IdocgenStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "SwarmAgentsUrl", {
       value: swarm_agents_url.url,
+    });
+
+    const csv_maker_function = new lambda.DockerImageFunction(
+      this,
+      "CsvMakerFunction",
+      {
+        code: lambda.DockerImageCode.fromImageAsset("./images/csv_maker"),
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(15),
+        description: "idocgen:csv_maker",
+      }
+    );
+
+    const csv_maker_url = csv_maker_function.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      cors: {
+        allowedOrigins: ["*"],
+        allowedMethods: [lambda.HttpMethod.ALL],
+        allowedHeaders: ["*"],
+      },
+    });
+
+    new cdk.CfnOutput(this, "CsvMakerUrl", {
+      value: csv_maker_url.url,
     });
   }
 }
