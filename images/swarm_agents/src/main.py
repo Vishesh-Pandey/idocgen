@@ -56,11 +56,9 @@ def generate_ppt(ppt_content):
 
     return result
 
-def generate_csv(data_topic, num_rows):
+def generate_csv(data):
     """Generate CSV content based on user input."""
-    print(f"[mock] Generating CSV with topic '{data_topic}' and {num_rows} rows...")
-    csv_content = "\n".join([f"Row {i+1}, Data {random.randint(1, 100)}" for i in range(num_rows)])
-    return csv_content
+    print("THE PROVIDED DATA IS : " , data)
 
 triage_agent = Agent(
     name="Triage Agent",
@@ -83,7 +81,10 @@ ppt_maker_agent = Agent(
 csv_maker_agent = Agent(
     name="CSV Maker Agent",
     model="gpt-4o-mini",
-    instructions="Ask the user for a data topic and number of rows, then generate CSV data.",
+    instructions=("Ask the user for a data topic and number of rows, then generate CSV data."
+                  "For example Generate this if user asks for data about people: Name,Age,City\nAlice,25,New York\nBob,30,Los Angeles\nCharlie,22,Chicago"
+                  "Pass a single formatted string to the function."
+                  "Please ask user if they want to provide column names and number of rows"),
     functions=[generate_csv],
 )
 
@@ -197,6 +198,7 @@ def display_messages(messages):
     print()
 
 def handler(event, context):
+    
     data = event
     try:
         data = event.get('body') and json.loads(event['body']) or event
