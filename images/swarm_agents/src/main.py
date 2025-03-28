@@ -1,4 +1,4 @@
-from typing import List , Dict , Any , TypedDict , Optional
+from typing import List , TypedDict , Optional
 import json
 from swarm.repl import run_demo_loop
 from swarm import Agent
@@ -10,7 +10,6 @@ from botocore.exceptions import ClientError
 import requests
 
 import time
-import random
 import dotenv
 dotenv.load_dotenv()
 
@@ -33,10 +32,23 @@ def convert_to_dict(input_string):
         "description": descriptions
     }
 
-def send_api_request(data):
+def generate_ppt_api_request(data):
     url = "https://wwckrerv6vv3slv7t5dg54lqum0curtc.lambda-url.ap-south-1.on.aws/"
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, json=data, headers=headers)
+    
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return {"error": "Failed to get a valid response", "status_code": response.status_code}
+    
+
+def generate_csv_api_request(data):
+    url = "https://insjcgm3iqze6g6tfl6lqcv2ru0yasgm.lambda-url.ap-south-1.on.aws/"
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, json={"data": data}, headers=headers)
+
+    print("THE RESPONSE LOOKS LIKE THIS : " , response)
     
     if response.status_code == 200:
         return response.json()
@@ -49,16 +61,20 @@ def generate_ppt(ppt_content):
     print(f"[mock] Generating PPT with content: {ppt_content}")
 
     data = convert_to_dict(ppt_content)
-    result = send_api_request(data)
+    result = generate_ppt_api_request(data)
     print(result)
-
-
 
     return result
 
 def generate_csv(data):
     """Generate CSV content based on user input."""
     print("THE PROVIDED DATA IS : " , data)
+
+    result = generate_csv_api_request(data)
+
+    print("THE RESULT LOOKS LIKE THIS : ")
+    print(result)
+    return result
 
 triage_agent = Agent(
     name="Triage Agent",
