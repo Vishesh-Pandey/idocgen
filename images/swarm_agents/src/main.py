@@ -178,7 +178,7 @@ def run_demo_loop(
     print("==================================")
 
     response = client.run(
-        agent=triage_agent,
+        agent=agent,
         messages=messages,
         context_variables=context_variables or {},
         stream=stream,
